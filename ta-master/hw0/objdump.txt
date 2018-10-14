@@ -10,15 +10,13 @@
  	Version References
  	Sections
  	SYMBOL TABLE
- 	Disassembly of section .init
- 	Disassembly of section .plt
- 	Disassembly of section .plt.got
- 	Disassembly of section .text
- 	Disassembly of section .fini
+ 	.init
+ 	.text
+ 	.bss
  
 3. What segment/section contains main (the function) and what is the address of main? (It should be the same as what you saw in gdb)
 
-	Disassembly of section .text
+	.text
 	00000000004007a6
 
 4. Do you see the stack segment anywhere? What about the heap? Explain.
