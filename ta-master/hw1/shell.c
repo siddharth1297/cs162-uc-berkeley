@@ -131,8 +131,41 @@ int main(unused int argc, unused char *argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
-    	
+      /* fprintf(stdout, "This shell doesn't know how to run programs.\n"); */
+      
+      /* Create process arguments */
+      char *proc_argv[tokens_get_length(tokens)];
+      int i;
+      for(i=0; i<tokens_get_length(tokens); i++) {
+        proc_argv[i] = malloc(sizeof(tokens_get_token(tokens, i)));
+        strcpy(proc_argv[i], tokens_get_token(tokens, i));
+      }
+      proc_argv[i] = '\0';
+
+      /* Create child process */
+      pid_t pid = fork();
+
+      if(pid > 0) {
+        /* Wait for the child process */
+        int status;
+        int rval_wait = waitpid(pid, &status, 0);
+        if(rval_wait == -1)
+          fprintf(stderr, "%s\n", strerror(errno));
+        else if(rval_wait == 0)
+          printf("%s\n", "no child has exited");
+      }
+      else {
+        /* Execute process */
+        if(execv(tokens_get_token(tokens, 0), proc_argv) == -1)
+          fprintf(stderr, "%s\n", strerror(errno));
+          exit(0); 
+      }
+
+      /* Clean up */
+      for(i=0; i<tokens_get_length(tokens); i++) {
+        free(proc_argv[i]);
+      }
+      
     }
 
     if (shell_is_interactive)
