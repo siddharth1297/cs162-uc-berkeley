@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "tokenizer.h"
+#include "path_resolution.h"
 
 /* Convenience macro to silence compiler warnings about unused function parameters. */
 #define unused __attribute__((unused))
@@ -131,15 +132,20 @@ int main(unused int argc, unused char *argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      /* fprintf(stdout, "This shell doesn't know how to run programs.\n"); */
+      // fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      
+      /* Get the full path */
+      char *path = (char *)malloc(sizeof(1024 * sizeof(char)));
+      path = find_full_path(tokens_get_token(tokens, 0));
       
       /* Create process arguments */
       char *proc_argv[tokens_get_length(tokens)];
       int i;
-      for(i=0; i<tokens_get_length(tokens); i++) {
+      for(i=1; i<tokens_get_length(tokens); i++) {
         proc_argv[i] = malloc(sizeof(tokens_get_token(tokens, i)));
         strcpy(proc_argv[i], tokens_get_token(tokens, i));
       }
+      proc_argv[0] = strdup(path);
       proc_argv[i] = '\0';
 
       /* Create child process */
@@ -156,16 +162,17 @@ int main(unused int argc, unused char *argv[]) {
       }
       else {
         /* Execute process */
-        if(execv(tokens_get_token(tokens, 0), proc_argv) == -1)
+        if(execv(proc_argv[0], proc_argv) == -1) {
           fprintf(stderr, "%s\n", strerror(errno));
-          exit(0); 
-      }
+          exit(0);
+        }
 
-      /* Clean up */
-      for(i=0; i<tokens_get_length(tokens); i++) {
-        free(proc_argv[i]);
+        /* Clean up */
+        free(path);
+        for(i=0; i<tokens_get_length(tokens); i++) {
+          free(proc_argv[i]);
+        }
       }
-      
     }
 
     if (shell_is_interactive)
