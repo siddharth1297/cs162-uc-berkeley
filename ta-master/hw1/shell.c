@@ -12,6 +12,7 @@
 
 #include "tokenizer.h"
 #include "path_resolution.h"
+#include "io_redirection.h"
 
 /* Convenience macro to silence compiler warnings about unused function parameters. */
 #define unused __attribute__((unused))
@@ -134,20 +135,6 @@ int main(unused int argc, unused char *argv[]) {
       /* REPLACE this to run commands as programs. */
       // fprintf(stdout, "This shell doesn't know how to run programs.\n");
       
-      /* Get the full path */
-      char *path = (char *)malloc(sizeof(1024 * sizeof(char)));
-      path = find_full_path(tokens_get_token(tokens, 0));
-      
-      /* Create process arguments */
-      char *proc_argv[tokens_get_length(tokens)];
-      int i;
-      for(i=1; i<tokens_get_length(tokens); i++) {
-        proc_argv[i] = malloc(sizeof(tokens_get_token(tokens, i)));
-        strcpy(proc_argv[i], tokens_get_token(tokens, i));
-      }
-      proc_argv[0] = strdup(path);
-      proc_argv[i] = '\0';
-
       /* Create child process */
       pid_t pid = fork();
 
@@ -161,6 +148,36 @@ int main(unused int argc, unused char *argv[]) {
           printf("%s\n", "no child has exited");
       }
       else {
+        /* Redirect */
+        int io_redirect_ind = redirect(tokens, tokens_get_length(tokens));
+        
+        /* Get the full path */
+        char *path = (char *)malloc(sizeof(1024 * sizeof(char)));
+        path = find_full_path(tokens_get_token(tokens, 0));
+        
+        /* Create process arguments */
+        int argv_len;
+        if(redirect_opt == 0) /* No redirection */
+          argv_len = tokens_get_length(tokens);
+        else if(redirect_opt == 1) /* OP rediretion */
+          argv_len = io_redirect_ind;
+        else /* IP redirection */
+          argv_len = tokens_get_length(tokens) - 1;
+        
+        char *proc_argv[argv_len+1];
+        int i, /* index to proc_argv */
+            j; /* index to tokens */
+
+        proc_argv[0] = strdup(path);
+        for(i=1, j=1; i<argv_len; i++, j++) { 
+          if( redirect_opt == -1 && ( strcmp(tokens_get_token(tokens, j), "<") ) == 0){ /* IP redirection */
+            i--; continue;
+          } 
+          proc_argv[i] = malloc(sizeof(tokens_get_token(tokens, j)));
+          strcpy(proc_argv[i], tokens_get_token(tokens, j)); 
+        }
+        proc_argv[argv_len] = '\0';
+        
         /* Execute process */
         if(execv(proc_argv[0], proc_argv) == -1) {
           fprintf(stderr, "%s\n", strerror(errno));
@@ -169,7 +186,7 @@ int main(unused int argc, unused char *argv[]) {
 
         /* Clean up */
         free(path);
-        for(i=0; i<tokens_get_length(tokens); i++) {
+        for(i=0; i<argv_len+1; i++) {
           free(proc_argv[i]);
         }
       }
