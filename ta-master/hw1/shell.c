@@ -29,6 +29,9 @@ struct termios shell_tmodes;
 /* Process group id for the shell */
 pid_t shell_pgid;
 
+/* line number */
+int line_num = 0;
+
 int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
@@ -101,14 +104,30 @@ void init_shell() {
     while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
       kill(-shell_pgid, SIGTTIN);
 
+    /* Ignore signal */
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+    signal(SIGKILL, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    signal(SIGCONT, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+
     /* Saves the shell's process id */
     shell_pgid = getpid();
+    
+    /* set process group id */
+    if (setpgid(shell_pgid, shell_pgid) == -1) {
+      fprintf(stderr, "%s\n", strerror(errno));
+      exit(1);
+    }
 
     /* Take control of the terminal */
     tcsetpgrp(shell_terminal, shell_pgid);
 
     /* Save the current termios to a variable, so it can be restored later. */
     tcgetattr(shell_terminal, &shell_tmodes);
+
   }
 }
 
@@ -116,7 +135,6 @@ int main(unused int argc, unused char *argv[]) {
   init_shell();
 
   static char line[4096];
-  int line_num = 0;
 
   /* Please only print shell prompts when standard input is not a tty */
   if (shell_is_interactive)
@@ -148,6 +166,16 @@ int main(unused int argc, unused char *argv[]) {
           printf("%s\n", "no child has exited");
       }
       else {
+        
+        /* Enable accepting signal */
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGKILL, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGCONT, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+
         /* Redirect */
         int io_redirect_ind = redirect(tokens, tokens_get_length(tokens));
         
@@ -173,17 +201,17 @@ int main(unused int argc, unused char *argv[]) {
           if( redirect_opt == -1 && ( strcmp(tokens_get_token(tokens, j), "<") ) == 0){ /* IP redirection */
             i--; continue;
           } 
-          proc_argv[i] = malloc(sizeof(tokens_get_token(tokens, j)));
-          strcpy(proc_argv[i], tokens_get_token(tokens, j)); 
+          proc_argv[i] = (char *)malloc(sizeof(char) * strlen(tokens_get_token(tokens, j)));
+          strcpy(proc_argv[i], tokens_get_token(tokens, j));
         }
         proc_argv[argv_len] = '\0';
         
         /* Execute process */
         if(execv(proc_argv[0], proc_argv) == -1) {
           fprintf(stderr, "%s\n", strerror(errno));
-          exit(0);
+          exit(EXIT_FAILURE);
         }
-
+        
         /* Clean up */
         free(path);
         for(i=0; i<argv_len+1; i++) {
