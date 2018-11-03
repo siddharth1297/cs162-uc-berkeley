@@ -13,6 +13,7 @@
 #include "tokenizer.h"
 #include "path_resolution.h"
 #include "io_redirection.h"
+#include "process.h"
 
 /* Convenience macro to silence compiler warnings about unused function parameters. */
 #define unused __attribute__((unused))
@@ -36,6 +37,7 @@ int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
 int cmd_cd(struct tokens *tokens);
+int cmd_wait();
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
 
@@ -51,6 +53,7 @@ fun_desc_t cmd_table[] = {
   {cmd_exit, "exit", "exit the command shell"},
   {cmd_pwd, "pwd", "current working directory"},
   {cmd_cd, "cd", "change current working directory"},
+  {cmd_wait, "wait", "show terminal prompt"},
 };
 
 /* Prints a helpful description for the given command */
@@ -79,6 +82,13 @@ int cmd_cd(unused struct tokens *tokens) {
 	if(chdir(tokens_get_token(tokens, 1)) == -1)
 		fprintf(stderr, "%s\n", strerror(errno));
 	return 1;
+}
+
+/* Wait for all background processes */
+int cmd_wait() {
+  int status;
+  wait(&status);
+  return 1;
 }
 
 /* Looks up the built-in command, if it exists. */
@@ -153,17 +163,22 @@ int main(unused int argc, unused char *argv[]) {
       /* REPLACE this to run commands as programs. */
       // fprintf(stdout, "This shell doesn't know how to run programs.\n");
       
+      /* Check whether background process */
+      int bc_grnd = put_background(tokens);
+
       /* Create child process */
       pid_t pid = fork();
 
       if(pid > 0) {
-        /* Wait for the child process */
-        int status;
-        int rval_wait = waitpid(pid, &status, 0);
-        if(rval_wait == -1)
-          fprintf(stderr, "%s\n", strerror(errno));
-        else if(rval_wait == 0)
-          printf("%s\n", "no child has exited");
+        if(!bc_grnd) {
+          /* If not background process, Wait for the child process */
+          int status;
+          int rval_wait = waitpid(pid, &status, 0);
+          if(rval_wait == -1)
+            fprintf(stderr, "%s\n", strerror(errno));
+          else if(rval_wait == 0)
+            printf("%s\n", "no child has exited");
+          }
       }
       else {
         
@@ -185,13 +200,15 @@ int main(unused int argc, unused char *argv[]) {
         
         /* Create process arguments */
         int argv_len;
-        if(redirect_opt == 0) /* No redirection */
+        if(bc_grnd) /* Background process */
+          argv_len = tokens_get_length(tokens) - 1;
+        else if(redirect_opt == 0) /* No redirection */
           argv_len = tokens_get_length(tokens);
         else if(redirect_opt == 1) /* OP rediretion */
           argv_len = io_redirect_ind;
         else /* IP redirection */
           argv_len = tokens_get_length(tokens) - 1;
-        
+
         char *proc_argv[argv_len+1];
         int i, /* index to proc_argv */
             j; /* index to tokens */

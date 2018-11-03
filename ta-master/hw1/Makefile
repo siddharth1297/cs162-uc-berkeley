@@ -1,4 +1,4 @@
-SRCS=shell.c tokenizer.c path_resolution.c io_redirection.c
+SRCS=shell.c tokenizer.c path_resolution.c io_redirection.c process.c
 EXECUTABLES=shell
 
 CC=gcc
