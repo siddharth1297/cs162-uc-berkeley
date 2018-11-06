@@ -3,10 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #include "libhttp.h"
 
 #define LIBHTTP_REQUEST_MAX_SIZE 8192
+
 
 void http_fatal_error(char *message) {
   fprintf(stderr, "%s\n", message);
@@ -143,4 +147,154 @@ char *http_get_mime_type(char *file_name) {
   } else {
     return "text/plain";
   }
+}
+
+/* Check directory or not */
+int check_directory(char *dir_name) {
+    struct stat dir_stat;
+    if(stat(dir_name, &dir_stat) == -1) {
+      fprintf(stderr, "Check directory %s : %s\n", dir_name, strerror(errno));
+      return 0;
+    }
+    return S_ISDIR(dir_stat.st_mode);
+}
+
+/* Check file or not */
+int check_file(char *file_name) {
+  struct stat f_info;
+  if(stat(file_name, &f_info) == -1) {
+    fprintf(stderr, "Check file %s : %s\n", file_name, strerror(errno));
+    return 0;
+  }
+  return S_ISREG(f_info.st_mode);
+}
+
+/* Check whether contains index.html */
+int contain_file(char *file_path) {
+  char *f_n;
+  if((f_n=(char*)malloc(sizeof(char*)*(strlen(file_path) + strlen("index.html")+2))) == NULL) {
+    fprintf(stderr, "%s\n", strerror((errno)));
+    return 0;
+  }
+
+  strcpy(f_n, file_path);
+  strcat(f_n, "index.html");
+        
+  if(check_file(f_n)) {
+    full_file_name = (char*) malloc(sizeof(char*)*(strlen(f_n)+1));
+    full_file_name = strdup(f_n);
+    free(f_n);
+    return 1;
+  }
+  return 0;
+}
+
+/* Read whole path starting from directory */
+char *read_path(char *directory, char* path) {
+  char *full_path;
+  if((full_path = (char *)malloc(sizeof(char)*(strlen(path)+strlen(directory)+2))) == NULL) {
+    fprintf(stderr, "%s\n", strerror(errno));
+    return NULL;
+  }
+
+  strcpy(full_path, directory);
+  strcat(full_path, path);
+
+  char last_char = full_path[strlen(full_path)-1];
+
+  if(last_char == '/') {
+    /* Directory */
+    if(check_directory(full_path)) {
+      /* Check for file */
+      if(contain_file(full_path)) {
+        /* Return file content */
+        free(full_path);
+        return get_content_string(full_file_name);
+      } else {
+        /* Directory exist, but file not found */
+        return read_directory(full_path);
+      }
+    } else {
+      /* Directory not exist */
+      return NULL;
+    }
+  }
+
+  if(check_file(full_path)) {
+    /* File found */
+    if((full_file_name = (char*)malloc(sizeof(char)*(strlen(full_path)+1))) == NULL) {
+      fprintf(stderr, "%s\n", strerror(errno));
+      return NULL;
+    }
+
+    strcpy(full_file_name, full_path);
+    return get_content_string(full_file_name);
+  } else {
+    /* File not found */
+    return NULL;
+  }
+
+  return NULL;
+}
+
+/* Read files/directories from directory */
+char *read_directory(char *dir_name) {
+  DIR *dir;
+
+  if((dir = opendir(dir_name)) == NULL) {
+    fprintf(stderr, "Error in openning directory : %s\n", strerror(errno));
+    return NULL;
+  }
+  
+  char *str = (char*)malloc(1024);
+  if(str == NULL) {
+    fprintf(stderr, "%s\n", strerror(errno));
+    return NULL;
+  }
+  
+  struct dirent *d;
+  
+  char *s = (char *)malloc(1024);
+  sprintf(s, " Index of %s <br> ", dir_name);
+  strcpy(str, s);
+  free(s);
+  while((d = readdir(dir)) != 0) {
+    s = (char *)malloc(1024);
+    if(strcmp(d->d_name, "..") == 0)
+      sprintf(s, " <a href=\"%s\"> %s </a> <br> ", d->d_name ,"Parent Directory");
+    else
+      sprintf(s, " <a href=\"%s\"> %s </a> <br> ", d->d_name ,d->d_name);
+    strcat(str, s);
+    free(s);
+  }
+
+  closedir(dir);
+    
+  return str;
+}
+
+/* Content length of file */
+size_t get_content_length(char *file_name) {
+   struct stat f_info;
+   if(stat(file_name, &f_info) == -1) {
+    fprintf(stderr, "Get content length %s : %s\n", file_name, strerror(errno));
+    return 0;
+  }
+  return f_info.st_size;
+}
+
+/* Content of a file */
+char* get_content_string(char *file_name) {
+  size_t length = get_content_length(file_name);
+  FILE *fp = fopen(file_name, "r");
+  if(fp == NULL) {
+    fprintf(stderr, "Error in opening file : %s\n", strerror(errno));
+    return NULL;
+  }
+  char *str = malloc(length);
+  if(fread(str, 1, length, fp) < length) {
+      fprintf(stderr, "ERROR: failed to read file\n");
+      return NULL;
+   }
+   return str;
 }

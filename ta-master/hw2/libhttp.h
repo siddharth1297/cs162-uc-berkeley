@@ -28,6 +28,7 @@ struct http_request {
   char *path;
 };
 
+char* full_file_name;
 struct http_request *http_request_parse(int fd);
 
 /*
@@ -43,5 +44,26 @@ void http_send_data(int fd, char *data, size_t size);
  * Helper function: gets the Content-Type based on a file name.
  */
 char *http_get_mime_type(char *file_name);
+
+/* Check directory or not */
+int check_directory(char *dir_name);
+
+/* Check file or not */
+int check_file(char *name);
+
+/* Check whether contains index.html */
+int contain_file(char *file_path);
+
+/* Read files/directories from directory */
+char *read_directory(char *dir_name);
+
+/* Read whole path starting from directory */
+char *read_path(char*, char*);
+
+/* content length of file */
+size_t get_content_length(char *file_name);
+
+/* Content of a file */
+char* get_content_string(char *file_name);
 
 #endif

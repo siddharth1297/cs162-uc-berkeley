@@ -52,15 +52,40 @@ void handle_files_request(int fd) {
 
   struct http_request *request = http_request_parse(fd);
 
-  http_start_response(fd, 200);
-  http_send_header(fd, "Content-Type", "text/html");
-  http_end_headers(fd);
-  http_send_string(fd,
-      "<center>"
-      "<h1>Welcome to httpserver!</h1>"
-      "<hr>"
-      "<p>Nothing's here yet.</p>"
-      "</center>");
+  char *str;
+  str = read_path(server_files_directory, request->path);
+  
+  if(str == NULL) {
+    http_start_response(fd, 404);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd); 
+    http_send_string(fd,
+        "<center>"
+        "<h1>Welcome to httpserver!</h1>"
+        "<hr>"
+        "<p>Nothing's here yet.</p>"
+        "</center>");
+  } else {
+    size_t con_len;
+    
+    http_start_response(fd, 200);
+    if(full_file_name == NULL) {
+      http_send_header(fd, "Content-Type", "text/html");
+      con_len = sizeof(str);
+    }
+    else {
+      http_send_header(fd, "Content-Type", http_get_mime_type(full_file_name));
+      con_len = get_content_length(full_file_name);
+    }
+    int l_length = snprintf( NULL, 0, "%ld", con_len);
+    char* str_len = malloc( l_length + 1 );
+    snprintf( str_len, l_length + 1, "%ld", con_len);
+    
+    http_send_header(fd, "Content-Length", str_len);
+    http_end_headers(fd);
+    http_send_string(fd, str);
+  }
+  free(str);
 }
 
 
