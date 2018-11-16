@@ -17,6 +17,7 @@
 
 #include "libhttp.h"
 #include "wq.h"
+#include "thpool.h"
 
 /*
  * Global configuration variables.
@@ -86,6 +87,7 @@ void handle_files_request(int fd) {
     http_send_string(fd, str);
   }
   free(str);
+  close(fd);
 }
 
 
@@ -153,6 +155,17 @@ void init_thread_pool(int num_threads, void (*request_handler)(int)) {
   /*
    * TODO: Part of your solution for Task 2 goes here!
    */
+
+  /* No of threads can't be <=0 */
+  if(num_threads <= 0)
+    return ;
+  
+  /* Initialize thread pool */
+  if (thpool_init(num_threads, request_handler) == 0) {
+    fprintf(stderr, "Error in creaating thread pool\n");
+    exit(1);
+  }
+  
 }
 
 /*
@@ -213,8 +226,8 @@ void serve_forever(int *socket_number, void (*request_handler)(int)) {
         client_address.sin_port);
 
     // TODO: Change me?
-    request_handler(client_socket_number);
-    close(client_socket_number);
+    //request_handler(client_socket_number);
+    add_to_work_queue(client_socket_number);
 
     printf("Accepted connection from %s on port %d\n",
         inet_ntoa(client_address.sin_addr),
