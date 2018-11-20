@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <unistd.h>
+#include <sys/epoll.h>
 
 #include "libhttp.h"
 #include "wq.h"
@@ -90,6 +90,17 @@ void handle_files_request(int fd) {
   close(fd);
 }
 
+/* Make socket to non blocking */
+int setnonblock(int fd) {
+   int fdflags;
+
+   if ((fdflags = fcntl(fd, F_GETFL, 0)) == -1)
+      return -1;
+   fdflags |= O_NONBLOCK;
+   if (fcntl(fd, F_SETFL, fdflags) == -1)
+      return -1;
+   return 0;
+}
 
 /*
  * Opens a connection to the proxy target (hostname=server_proxy_hostname and
@@ -148,6 +159,91 @@ void handle_proxy_request(int fd) {
   /* 
   * TODO: Your solution for task 3 belongs here! 
   */
+
+  if(setnonblock(fd) || setnonblock(client_socket_fd)) {
+    fprintf(stderr, "Cannot set socket to non blocking\n");
+    return ;
+  }
+
+  #define MAX_EVENT 2
+  struct epoll_event ev, events[MAX_EVENT];
+  /* Create epoll event */
+  int epollfd;
+  if( (epollfd = epoll_create1(0)) == -1) {
+    perror("epoll_create1");
+    return ;
+  }
+
+ /* Control operation */ 
+ ev.events = EPOLLIN;
+ ev.data.fd = fd;
+ if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+     fprintf(stderr, "epoll_ctl - fd: %s\n", strerror(errno));
+    return ;
+ }
+
+ ev.data.fd = client_socket_fd;
+ if(epoll_ctl(epollfd, EPOLL_CTL_ADD, client_socket_fd, &ev) == -1) {
+    fprintf(stderr, "epollfd_ctl - client_socket_fd: %s\n", strerror(errno));
+    return ;
+ }
+
+ int flag = 1;
+ while(flag) {
+  /* wait for io operation */
+  int nfds, n;
+  if((nfds = epoll_wait(epollfd, events, MAX_EVENT, -1)) == -1) {
+    fprintf(stderr, "Error in epoll wait: %s\n", strerror(errno));
+    flag = 0;
+    break;
+  }
+  for(n=0; n<nfds; n++) {
+    char buf[1024];
+
+    if(events[n].data.fd == fd && (events[n].events == EPOLLIN)) {
+      /* Read */
+      size_t r = read(fd, buf, sizeof(buf));
+      if(r == -1) {
+        fprintf(stderr, "Error in read - fd: %s\n", strerror(errno));
+        flag = 0;
+        break;
+      } else if(r == 0) {
+        flag = 0;
+        break;
+      }
+      
+      r = write(client_socket_fd, buf, sizeof(buf));
+      if(r == -1) {
+        fprintf(stderr, "Error in write - client_socket_fd: %s\n", strerror(errno));
+        flag = 0;
+        break;
+      }
+    } else if(events[n].data.fd == client_socket_fd && (events[n].events == EPOLLIN)) {
+      
+      size_t r = read(client_socket_fd, buf, sizeof(buf));
+      if(r == -1) {
+        fprintf(stderr, "Error in read - client_socket_fd: %s\n", strerror(errno));
+        flag = 0;
+        break;
+      } else if(r == 0) {
+        flag = 0;
+        break;
+      }
+
+      r = write(fd, buf, sizeof(buf));
+      if(r == -1) {
+        fprintf(stderr, "Error in write - fd: %s\n", strerror(errno));
+        flag = 0;
+        break;
+      }
+    } else {
+      continue;
+    }
+  }
+ }
+
+ close(epollfd);
+
 }
 
 
