@@ -198,6 +198,9 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  /* Initialize sleep time */
+  t->sleep_until_ticks = 0;
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -582,3 +585,14 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Decreases sleep_until_ticks and unblocks thread, if time is over */
+void
+thread_block_check (struct thread *thread, void *aux) {
+  if (thread->status == THREAD_BLOCKED && thread->sleep_until_ticks > 0)
+  {
+      thread->sleep_until_ticks--;
+      if(thread->sleep_until_ticks == 0)
+          thread_unblock(thread);   
+  }
+}
